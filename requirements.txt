@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlmodel
+alembic
+pydantic
+fpdf
+reportlab
+python-dotenv
+gunicorn
+redis
+psycopg2-binary
+python-dotenv
+pydantic-ai
