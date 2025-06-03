@@ -1,7 +1,14 @@
 from typing import Optional
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
+from pydantic_ai.models.groq import GroqModel
 
+
+# Agent configuration
+
+AGENT_MODEL = GroqModel(
+    "llama-3.3-70b-versatile"
+)
 # Step 1: Define proposal input model
 class ProposalInput(BaseModel):
     client_name: str = Field(..., description="Client's name or organization")
@@ -72,7 +79,7 @@ sample_input = ProposalInput(
 )
 
 # Step 3: Create the Gemini AI agent
-agent = Agent("google-gla:gemini-2.0-flash")
+agent = Agent(AGENT_MODEL)
 
 # Step 4: Format prompt for proposal generation
 

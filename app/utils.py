@@ -4,9 +4,14 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from dotenv import load_dotenv
-# Load environment variables
-load_dotenv()
+from pydantic_ai.models.groq import GroqModel
 
+load_dotenv()
+# Agent configuration
+
+AGENT_MODEL = GroqModel(
+    "llama-3.3-70b-versatile"
+)
 # Proposal schema
 class ProposalInput(BaseModel):
     client_name: str = Field(..., description="Client's name or organization")
@@ -53,8 +58,8 @@ If all fields are collected, say "All done" and stop asking.
 """
 
 # Agents
-chat_agent = Agent("google-gla:gemini-2.0-flash", system_prompt= BASE_PROMPT, output_type=chat_output)
-structured_agent = Agent("google-gla:gemini-2.0-flash", output_type=ProposalInput)
+chat_agent = Agent(AGENT_MODEL, system_prompt= BASE_PROMPT, output_type=chat_output)
+structured_agent = Agent(AGENT_MODEL, output_type=ProposalInput)
 
 # Instruction with reasoning mode
 
