@@ -8,9 +8,11 @@ import uuid
 import os
 import asyncio
 from typing import AsyncGenerator
+from dotenv import load_dotenv  
 
+load_dotenv()  # Load environment variables from .env file
 # Set up the engine here (since app.main is not guaranteed to have it)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "")  # Default to SQLite for testing
 engine = create_engine(DATABASE_URL, echo=True)
 
 # Dependency to get DB session
