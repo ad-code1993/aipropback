@@ -9,6 +9,7 @@ import os
 import asyncio
 from typing import AsyncGenerator
 from dotenv import load_dotenv  
+import logging
 
 load_dotenv()  # Load environment variables from .env file
 # Set up the engine here (since app.main is not guaranteed to have it)
@@ -93,8 +94,9 @@ async def continue_proposal(session_id: str, body: dict, db: Session = Depends(g
     async def generate_stream() -> AsyncGenerator[str, None]:
         try:
             ai_response = await chat_agent.run(session.history)
-        except Exception:
-            yield "[ERROR] Failed to get AI response."
+        except Exception as e:
+            logging.error(f"AI response error: {e}", exc_info=True)
+            yield f"[ERROR] Failed to get AI response: {e}"
             return
         if not ai_response or not getattr(ai_response, "output", None):
             yield "[ERROR] Failed to get AI response."
