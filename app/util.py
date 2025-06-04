@@ -1,14 +1,22 @@
 from typing import Optional
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.models.groq import GroqModel
+from pydantic_ai.models.gemini import GeminiModel, GeminiModelSettings
+from dotenv import load_dotenv
+load_dotenv()
 
 
 # Agent configuration
 
-AGENT_MODEL = GroqModel(
-    "llama-3.3-70b-versatile"
+MODEL_SETTINGS = GeminiModelSettings(
+    temperature=0.7,  # Adjust temperature for creativity vs. precision
+    max_tokens=2000,  # Limit the response length
+    top_p=0.9,  # Use nucleus sampling for more diverse outputs
+    frequency_penalty=0.5,  # Penalize repeated phrases
+    presence_penalty=0.5,  # Encourage new topics
 )
+
+AGENT_MODEL = GeminiModel('gemini-2.0-flash')
 # Step 1: Define proposal input model
 class ProposalInput(BaseModel):
     client_name: str = Field(..., description="Client's name or organization")
@@ -79,7 +87,7 @@ sample_input = ProposalInput(
 )
 
 # Step 3: Create the Gemini AI agent
-agent = Agent(AGENT_MODEL)
+agent = Agent(AGENT_MODEL, model_settings=MODEL_SETTINGS)
 
 # Step 4: Format prompt for proposal generation
 
