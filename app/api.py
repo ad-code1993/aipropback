@@ -79,65 +79,43 @@ async def start_proposal(db: Session = Depends(get_session)):
 # 2. Continue proposal Q&A with simulated streaming
 @router.post("/continue_proposal/{session_id}")
 async def continue_proposal(session_id: str, body: dict, db: Session = Depends(get_session)):
-    session = db.exec(select(ProposalSession).where(ProposalSession.session_id == session_id)).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    user_response = body.get("response")
-    if not user_response:
-        raise HTTPException(status_code=422, detail="Missing 'response' in request body")
-    
-    # Update session with user response
-    session.history += f"\n\n### User:\n{user_response}\n"
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-
-    # Get AI chat response
     try:
-        ai_response = await chat_agent.run(session.history)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI response error: {str(e)}")
+        logging.info(f"Handling continue_proposal for session_id={session_id} with body={body}")
 
-    if not ai_response or not getattr(ai_response, "output", None):
-        raise HTTPException(status_code=500, detail="Failed to get AI response.")
+        session = db.exec(select(ProposalSession).where(ProposalSession.session_id == session_id)).first()
+        if not session:
+            logging.warning("Session not found")
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    next_question = ai_response.output.question.strip()
-    reasoning = ai_response.output.reason.strip()
-    done_flag = getattr(ai_response.output, "done", False)
+        user_response = body.get("response")
+        if not user_response:
+            logging.warning("Missing user response")
+            raise HTTPException(status_code=422, detail="Missing 'response' in request body")
 
-    # Append AI response to session history
-    session.history += f"\n\n### Assistant:\n{reasoning}\n\n### Assistant:\n{next_question}"
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-
-    # If done, run structured agent
-    if done_flag or "all done" in next_question.lower() or "all fields are collected" in next_question.lower():
-        try:
-            final_result = await structured_agent.run(session.history)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail="Failed to get structured proposal.")
-
-        proposal = final_result.output
-        session.client_name = proposal.client_name
-        session.project_title = proposal.project_title
-        session.problem_statement = proposal.problem_statement
-        session.proposed_solution = proposal.proposed_solution
-        session.previous_experience = proposal.previous_experience
-        session.objectives = proposal.objectives
-        session.implementation_plan = proposal.implementation_plan
-        session.benefits = proposal.benefits
-        session.timeline = proposal.timeline
-        session.budget = proposal.budget
-        session.deliverables = proposal.deliverables
-        session.technologies = proposal.technologies
-
+        session.history += f"\n\n### User:\n{user_response}"
         db.add(session)
         db.commit()
         db.refresh(session)
 
-    return PlainTextResponse(f"[REASONING]\n{reasoning}\n\n{next_question}")
+        ai_response = await chat_agent.run(session.history)
+
+        if not ai_response or not getattr(ai_response, "output", None):
+            raise HTTPException(status_code=500, detail="AI output is missing")
+
+        next_question = ai_response.output.question.strip()
+        reasoning = ai_response.output.reason.strip()
+
+        session.history += f"\n\n### Assistant:\n{reasoning}\n\n### Assistant:\n{next_question}"
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+
+        return PlainTextResponse(f"[REASONING]\n{reasoning}\n\n{next_question}")
+
+    except Exception as e:
+        logging.error("Error in /continue_proposal", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 # 3. Get proposal data
 @router.get("/proposal/{session_id}", response_model=ProposalInputModel)
 def get_proposal(session_id: str, db: Session = Depends(get_session)):
