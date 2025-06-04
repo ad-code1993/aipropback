@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Body
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse
 from sqlmodel import Session, select, create_engine, Field
 from .models import ProposalSession
 from .utils import chat_agent, structured_agent, ProposalInput as ProposalInputModel, BASE_PROMPT
@@ -82,67 +82,62 @@ async def continue_proposal(session_id: str, body: dict, db: Session = Depends(g
     session = db.exec(select(ProposalSession).where(ProposalSession.session_id == session_id)).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    
     user_response = body.get("response")
     if not user_response:
         raise HTTPException(status_code=422, detail="Missing 'response' in request body")
-    # Update session with user response (structured)
+    
+    # Update session with user response
     session.history += f"\n\n### User:\n{user_response}\n"
     db.add(session)
     db.commit()
     db.refresh(session)
 
-    async def generate_stream() -> AsyncGenerator[str, None]:
+    # Get AI chat response
+    try:
+        ai_response = await chat_agent.run(session.history)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI response error: {str(e)}")
+
+    if not ai_response or not getattr(ai_response, "output", None):
+        raise HTTPException(status_code=500, detail="Failed to get AI response.")
+
+    next_question = ai_response.output.question.strip()
+    reasoning = ai_response.output.reason.strip()
+    done_flag = getattr(ai_response.output, "done", False)
+
+    # Append AI response to session history
+    session.history += f"\n\n### Assistant:\n{reasoning}\n\n### Assistant:\n{next_question}"
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+
+    # If done, run structured agent
+    if done_flag or "all done" in next_question.lower() or "all fields are collected" in next_question.lower():
         try:
-            ai_response = await chat_agent.run(session.history)
+            final_result = await structured_agent.run(session.history)
         except Exception as e:
-            logging.error(f"AI response error: {e}", exc_info=True)
-            yield f"[ERROR] Failed to get AI response: {e}"
-            return
-        if not ai_response or not getattr(ai_response, "output", None):
-            yield "[ERROR] Failed to get AI response."
-            return
-        next_question = ai_response.output.question.strip()
-        reasoning = ai_response.output.reason.strip()
-        done_flag = getattr(ai_response.output, "done", False)
-        # Stream UI output only
-        streamed_output = f"[REASONING]\n{reasoning}\n\n{next_question}"
-        for char in streamed_output:
-            yield char
-            await asyncio.sleep(0.01)
-        # Store clean history (no UI markup)
-        session.history += f"\n\n### Assistant:\n{reasoning}\n\n### Assistant:\n{next_question}"
+            raise HTTPException(status_code=500, detail="Failed to get structured proposal.")
+
+        proposal = final_result.output
+        session.client_name = proposal.client_name
+        session.project_title = proposal.project_title
+        session.problem_statement = proposal.problem_statement
+        session.proposed_solution = proposal.proposed_solution
+        session.previous_experience = proposal.previous_experience
+        session.objectives = proposal.objectives
+        session.implementation_plan = proposal.implementation_plan
+        session.benefits = proposal.benefits
+        session.timeline = proposal.timeline
+        session.budget = proposal.budget
+        session.deliverables = proposal.deliverables
+        session.technologies = proposal.technologies
+
         db.add(session)
         db.commit()
         db.refresh(session)
-        # Check for completion
-        if done_flag or "all done" in next_question.lower() or "all fields are collected" in next_question.lower():
-            try:
-                final_result = await structured_agent.run(session.history)
-            except Exception:
-                yield "[ERROR] Failed to get structured proposal."
-                return
-            proposal = final_result.output
-            session.client_name = proposal.client_name
-            session.project_title = proposal.project_title
-            session.problem_statement = proposal.problem_statement
-            session.proposed_solution = proposal.proposed_solution
-            session.previous_experience = proposal.previous_experience
-            session.objectives = proposal.objectives
-            session.implementation_plan = proposal.implementation_plan
-            session.benefits = proposal.benefits
-            session.timeline = proposal.timeline
-            session.budget = proposal.budget
-            session.deliverables = proposal.deliverables
-            session.technologies = proposal.technologies
-            db.add(session)
-            db.commit()
-            db.refresh(session)
-            completion_msg = f"\n[SYSTEM] Proposal generation complete! Visit the preview page.\n\n[FINAL REASONING]\n{reasoning}\n"
-            for char in completion_msg:
-                yield char
-                await asyncio.sleep(0.01)
-    return StreamingResponse(generate_stream(), media_type="text/plain")
 
+    return PlainTextResponse(f"[REASONING]\n{reasoning}\n\n{next_question}")
 # 3. Get proposal data
 @router.get("/proposal/{session_id}", response_model=ProposalInputModel)
 def get_proposal(session_id: str, db: Session = Depends(get_session)):
