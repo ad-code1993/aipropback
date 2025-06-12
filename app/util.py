@@ -9,9 +9,8 @@ load_dotenv()
 # Agent configuration
 
 MODEL_SETTINGS = GeminiModelSettings(
-    temperature=0.7,  # Adjust temperature for creativity vs. precision
-    max_tokens=2000,  # Limit the response length
-    top_p=0.9,  # Use nucleus sampling for more diverse outputs
+    temperature=0.7,  # Adjust temperature for creativity vs. precision  # Limit the response length
+    top_p=0.7,  # Use nucleus sampling for more diverse outputs
     frequency_penalty=0.5,  # Penalize repeated phrases
     presence_penalty=0.5,  # Encourage new topics
 )
@@ -87,7 +86,7 @@ sample_input = ProposalInput(
 )
 
 # Step 3: Create the Gemini AI agent
-agent = Agent(AGENT_MODEL, model_settings=MODEL_SETTINGS)
+agent = Agent(AGENT_MODEL, model_settings=MODEL_SETTINGS, retries=2)
 
 # Step 4: Format prompt for proposal generation
 
